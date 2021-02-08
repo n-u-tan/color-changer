@@ -1,5 +1,14 @@
 import { Component, ElementRef, ViewChild } from '@angular/core';
 
+function componentToHex(c: number) {
+  var hex = c.toString(16);
+  return hex.length == 1 ? '0' + hex : hex;
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
+}
+
 function HSLToRGB(h, s, l) {
   // Must be fractions of 1
   s /= 100;
@@ -43,7 +52,7 @@ function HSLToRGB(h, s, l) {
   return [r, g, b];
 }
 
-function RGBToHSL(r: number, g: number, b: number) {
+function RGBToHSL(r: number, g: number, b: number): [number, number, number] {
   r /= 255;
   g /= 255;
   b /= 255;
@@ -91,6 +100,8 @@ export class AppComponent {
   @ViewChild('canvas', { static: true }) public canvasElement: ElementRef<
     HTMLCanvasElement
   >;
+  @ViewChild('angleCanvas', { static: true })
+  public angleCanvasElement: ElementRef<HTMLCanvasElement>;
 
   public onFileChanged() {
     const file: Blob = this.fileInputElement.nativeElement.files[0];
@@ -113,28 +124,59 @@ export class AppComponent {
     const canvas = this.canvasElement.nativeElement;
     canvas.width = img.width; // set canvas size big enough for the image
     canvas.height = img.height;
-    console.log(img.width, img.height);
     var ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0); // draw the image
     let imageData: ImageData;
     imageData = ctx.getImageData(0, 0, img.width, img.height);
 
     const data = imageData.data;
-    console.log(data);
     length = data.length;
-    console.log(length);
     let i = -4;
+    const colors: Record<
+      string,
+      {
+        rgb: [number, number, number];
+        hsl: [number, number, number];
+        count: number;
+      }
+    > = {};
     while ((i += 1 * 4) < length) {
-      console.log('rgb', data[i], data[i + 1], data[i + 2]);
-      const hsl = RGBToHSL(data[i], data[i + 1], data[i + 2]);
-      if (hsl[0] <= 270 && hsl[0] >= 150) {
+      const rgb: [number, number, number] = [data[i], data[i + 1], data[i + 2]];
+      const key = rgb.join(',');
+      if (colors[key]) {
+        colors[key].count += 1;
+      } else {
+        colors[key] = { rgb, hsl: RGBToHSL(...rgb), count: 1 };
+      }
+      /*if (hsl[0] <= 270 && hsl[0] >= 150) {
         const newHsl: [number, number, number] = [60, hsl[1], hsl[2]];
         const newRgb = HSLToRGB(...newHsl);
         data[i] = newRgb[0];
         data[i + 1] = newRgb[1];
         data[i + 2] = newRgb[2];
-      }
+      }*/
     }
-    ctx.putImageData(imageData, 0, 0);
+    // ctx.putImageData(imageData, 0, 0);
+    const reducedColors = {};
+    const angleCanvas = this.angleCanvasElement.nativeElement;
+    const angleCtx = angleCanvas.getContext('2d');
+    Object.entries(colors).forEach(([k, v]) => {
+      if (v.count > 500) {
+        reducedColors[k] = v;
+        const r = 80 * Math.random() + 10;
+        let circle = new Path2D();
+        const angleRad = (v.hsl[0] * Math.PI) / 180;
+        circle.arc(
+          100 + r * Math.sin(angleRad),
+          100 + r * Math.cos(angleRad),
+          5,
+          0,
+          2 * Math.PI,
+          false
+        );
+        angleCtx.fillStyle = rgbToHex(...v.rgb);
+        angleCtx.fill(circle);
+      }
+    });
   }
 }

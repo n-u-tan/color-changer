@@ -1,4 +1,6 @@
-import { Component, ElementRef, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { fromEvent, merge } from 'rxjs';
+import { map, switchMap, takeUntil } from 'rxjs/operators';
 
 function componentToHex(c: number) {
   var hex = c.toString(16);
@@ -92,7 +94,7 @@ function RGBToHSL(r: number, g: number, b: number): [number, number, number] {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   title = 'app';
   @ViewChild('fileInput', { static: true }) public fileInputElement: ElementRef<
     HTMLInputElement
@@ -100,8 +102,12 @@ export class AppComponent {
   @ViewChild('canvas', { static: true }) public canvasElement: ElementRef<
     HTMLCanvasElement
   >;
+  @ViewChild('colorPointCanvas', { static: true })
+  public colorPointCanvasElement: ElementRef<HTMLCanvasElement>;
   @ViewChild('angleCanvas', { static: true })
   public angleCanvasElement: ElementRef<HTMLCanvasElement>;
+  public inputStartAngle = 150;
+  public inputEndAngle = 270;
 
   public onFileChanged() {
     const file: Blob = this.fileInputElement.nativeElement.files[0];
@@ -110,6 +116,88 @@ export class AppComponent {
       this.createImage(fr);
     };
     fr.readAsDataURL(file);
+  }
+
+  public ngOnInit() {
+    this.initAngleCanvas();
+    this.initAngleControl();
+  }
+
+  private initAngleCanvas() {
+    const angleCtx = this.angleCanvasElement.nativeElement.getContext('2d');
+    let borderCircle = new Path2D();
+    borderCircle.arc(100, 100, 95, 0, 2 * Math.PI, false);
+    angleCtx.strokeStyle = '#666666';
+    angleCtx.fillStyle = '#666666';
+    angleCtx.stroke(borderCircle);
+    let inputStartAngleRad = (this.inputStartAngle * Math.PI) / 180;
+    let inputEndAngleRad = (this.inputEndAngle * Math.PI) / 180;
+    let selectedSector = new Path2D();
+    selectedSector.moveTo(100, 100);
+    selectedSector.lineTo(
+      100 + 95 * Math.sin(inputStartAngleRad),
+      100 - 95 * Math.cos(inputStartAngleRad)
+    );
+    selectedSector.arc(
+      100,
+      100,
+      95,
+      inputStartAngleRad - Math.PI / 2,
+      inputEndAngleRad - Math.PI / 2
+    );
+    selectedSector.lineTo(100, 100);
+    angleCtx.stroke(selectedSector);
+    angleCtx.fill(selectedSector);
+  }
+
+  private initAngleControl() {
+    const mouseEventToCoordinate = (mouseEvent: MouseEvent) => {
+      mouseEvent.preventDefault();
+      const offset = this.getOffset(this.angleCanvasElement.nativeElement);
+      return {
+        x: mouseEvent.clientX - offset.left,
+        y: mouseEvent.clientY - offset.top
+      };
+    };
+
+    const touchEventToCoordinate = (touchEvent: TouchEvent) => {
+      touchEvent.preventDefault();
+      const offset = this.getOffset(this.angleCanvasElement.nativeElement);
+      return {
+        x: touchEvent.changedTouches[0].clientX - offset.left,
+        y: touchEvent.changedTouches[0].clientY - offset.top
+      };
+    };
+
+    const element = this.angleCanvasElement.nativeElement;
+    const mouseDown$ = fromEvent(element, 'mousedown').pipe(
+      map(mouseEventToCoordinate)
+    );
+    const mouseMove$ = fromEvent(element, 'mousemove').pipe(
+      map(mouseEventToCoordinate)
+    );
+    const mouseUp$ = fromEvent(element, 'mouseup').pipe(
+      map(mouseEventToCoordinate)
+    );
+    const mouseLeave$ = fromEvent(element, 'mouseleave').pipe(
+      map(mouseEventToCoordinate)
+    );
+    const mouseUpAndLeave$ = merge(mouseUp$, mouseLeave$);
+    const touchStart$ = fromEvent(element, 'touchstart').pipe(
+      map(touchEventToCoordinate)
+    );
+    const touchMove$ = fromEvent(element, 'touchmove').pipe(
+      map(touchEventToCoordinate)
+    );
+    const touchEnd$ = fromEvent(element, 'touchend').pipe(
+      map(touchEventToCoordinate)
+    );
+    const start$ = merge(mouseDown$, touchStart$);
+    const move$ = merge(mouseMove$, touchMove$);
+    const end$ = merge(mouseUpAndLeave$, touchEnd$);
+    start$
+      .pipe(switchMap(() => move$.pipe(takeUntil(end$))))
+      .subscribe(console.log);
   }
 
   private createImage(fr: FileReader) {
@@ -148,35 +236,35 @@ export class AppComponent {
       } else {
         colors[key] = { rgb, hsl: RGBToHSL(...rgb), count: 1 };
       }
-      /*if (hsl[0] <= 270 && hsl[0] >= 150) {
-        const newHsl: [number, number, number] = [60, hsl[1], hsl[2]];
-        const newRgb = HSLToRGB(...newHsl);
-        data[i] = newRgb[0];
-        data[i + 1] = newRgb[1];
-        data[i + 2] = newRgb[2];
-      }*/
     }
-    // ctx.putImageData(imageData, 0, 0);
     const reducedColors = {};
-    const angleCanvas = this.angleCanvasElement.nativeElement;
-    const angleCtx = angleCanvas.getContext('2d');
+    const colorPointCanvas = this.colorPointCanvasElement.nativeElement;
+    const colorPointCtx = colorPointCanvas.getContext('2d');
     Object.entries(colors).forEach(([k, v]) => {
-      if (v.count > 500) {
+      if (v.count > 500 && v.hsl[1] > 10 && v.hsl[2] < 90) {
         reducedColors[k] = v;
-        const r = 80 * Math.random() + 10;
+        const r = 70 * Math.random() + 20;
         let circle = new Path2D();
         const angleRad = (v.hsl[0] * Math.PI) / 180;
         circle.arc(
           100 + r * Math.sin(angleRad),
-          100 + r * Math.cos(angleRad),
+          100 - r * Math.cos(angleRad),
           5,
           0,
           2 * Math.PI,
           false
         );
-        angleCtx.fillStyle = rgbToHex(...v.rgb);
-        angleCtx.fill(circle);
+        colorPointCtx.fillStyle = rgbToHex(...v.rgb);
+        colorPointCtx.fill(circle);
       }
     });
+  }
+
+  private getOffset(el: HTMLElement) {
+    const rect = el.getBoundingClientRect();
+    const scrollLeft =
+      window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    return { top: rect.top + scrollTop, left: rect.left + scrollLeft };
   }
 }

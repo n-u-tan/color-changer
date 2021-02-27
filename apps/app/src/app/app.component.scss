@@ -1,0 +1,15 @@
+.input-angle-control {
+  position: relative;
+
+  .angle-canvas {
+    opacity: 0.5;
+
+  }
+
+  .color-point-canvas {
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}

@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { fromEvent, merge } from 'rxjs';
-import { map, switchMap, takeUntil } from 'rxjs/operators';
+import { filter, map, switchMap, takeUntil, tap } from 'rxjs/operators';
 
 function componentToHex(c: number) {
   var hex = c.toString(16);
@@ -119,12 +119,13 @@ export class AppComponent implements OnInit {
   }
 
   public ngOnInit() {
-    this.initAngleCanvas();
+    this.drawAngleCanvas();
     this.initAngleControl();
   }
 
-  private initAngleCanvas() {
+  private drawAngleCanvas() {
     const angleCtx = this.angleCanvasElement.nativeElement.getContext('2d');
+    angleCtx.clearRect(0, 0, 200, 200);
     let borderCircle = new Path2D();
     borderCircle.arc(100, 100, 95, 0, 2 * Math.PI, false);
     angleCtx.strokeStyle = '#666666';
@@ -151,53 +152,101 @@ export class AppComponent implements OnInit {
   }
 
   private initAngleControl() {
-    const mouseEventToCoordinate = (mouseEvent: MouseEvent) => {
+    const mouseEventToAngle = (mouseEvent: MouseEvent) => {
       mouseEvent.preventDefault();
       const offset = this.getOffset(this.angleCanvasElement.nativeElement);
-      return {
+      const point = {
         x: mouseEvent.clientX - offset.left,
         y: mouseEvent.clientY - offset.top
       };
+      const coor = {
+        x: point.x - 100,
+        y: point.y - 100
+      };
+      const r = Math.sqrt(coor.x * coor.x + coor.y * coor.y);
+      let theta = Math.acos(-coor.y / r);
+      if (coor.x < 0) {
+        theta = 2 * Math.PI - theta;
+      }
+      return (theta / Math.PI) * 180;
     };
 
-    const touchEventToCoordinate = (touchEvent: TouchEvent) => {
+    const touchEventToAngle = (touchEvent: TouchEvent) => {
       touchEvent.preventDefault();
       const offset = this.getOffset(this.angleCanvasElement.nativeElement);
-      return {
+      const point = {
         x: touchEvent.changedTouches[0].clientX - offset.left,
         y: touchEvent.changedTouches[0].clientY - offset.top
       };
+      const coor = {
+        x: point.x - 100,
+        y: point.y - 100
+      };
+      const r = Math.sqrt(coor.x * coor.x + coor.y * coor.y);
+      let theta = Math.acos(-coor.y / r);
+      if (coor.x < 0) {
+        theta = 2 * Math.PI - theta;
+      }
+      return (theta / Math.PI) * 180;
     };
 
     const element = this.angleCanvasElement.nativeElement;
     const mouseDown$ = fromEvent(element, 'mousedown').pipe(
-      map(mouseEventToCoordinate)
+      map(mouseEventToAngle)
     );
     const mouseMove$ = fromEvent(element, 'mousemove').pipe(
-      map(mouseEventToCoordinate)
+      map(mouseEventToAngle)
     );
-    const mouseUp$ = fromEvent(element, 'mouseup').pipe(
-      map(mouseEventToCoordinate)
-    );
+    const mouseUp$ = fromEvent(element, 'mouseup').pipe(map(mouseEventToAngle));
     const mouseLeave$ = fromEvent(element, 'mouseleave').pipe(
-      map(mouseEventToCoordinate)
+      map(mouseEventToAngle)
     );
     const mouseUpAndLeave$ = merge(mouseUp$, mouseLeave$);
     const touchStart$ = fromEvent(element, 'touchstart').pipe(
-      map(touchEventToCoordinate)
+      map(touchEventToAngle)
     );
     const touchMove$ = fromEvent(element, 'touchmove').pipe(
-      map(touchEventToCoordinate)
+      map(touchEventToAngle)
     );
     const touchEnd$ = fromEvent(element, 'touchend').pipe(
-      map(touchEventToCoordinate)
+      map(touchEventToAngle)
     );
     const start$ = merge(mouseDown$, touchStart$);
     const move$ = merge(mouseMove$, touchMove$);
     const end$ = merge(mouseUpAndLeave$, touchEnd$);
     start$
-      .pipe(switchMap(() => move$.pipe(takeUntil(end$))))
-      .subscribe(console.log);
+      .pipe(
+        map(angle => {
+          let ds = Math.abs(angle - this.inputStartAngle);
+          let de = Math.abs(angle - this.inputEndAngle);
+          ds = ds > 180 ? 360 - ds : ds;
+          de = de > 180 ? 360 - de : de;
+          if (ds <= de && ds <= 10) {
+            return 'start';
+          } else if (de <= ds && de <= 10) {
+            return 'end';
+          } else {
+            return null;
+          }
+        }),
+        filter(Boolean),
+        switchMap(changeTarget =>
+          move$.pipe(
+            takeUntil(end$),
+            tap({
+              next: angle => {
+                if (changeTarget === 'start') {
+                  this.inputStartAngle = angle;
+                } else if (changeTarget === 'end') {
+                  this.inputEndAngle = angle;
+                }
+                this.drawAngleCanvas();
+              }
+            })
+          )
+        )
+      )
+      .subscribe();
   }
 
   private createImage(fr: FileReader) {

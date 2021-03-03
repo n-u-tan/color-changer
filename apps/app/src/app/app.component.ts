@@ -108,6 +108,7 @@ export class AppComponent implements OnInit {
   public angleCanvasElement: ElementRef<HTMLCanvasElement>;
   public inputStartAngle = 150;
   public inputEndAngle = 270;
+  public outputAngle = 60;
 
   public onFileChanged() {
     const file: Blob = this.fileInputElement.nativeElement.files[0];
@@ -121,6 +122,8 @@ export class AppComponent implements OnInit {
   public ngOnInit() {
     this.drawAngleCanvas();
     this.initAngleControl();
+    this.drawOutputAngleCanvas();
+    this.initOutputAngleControl();
   }
 
   private drawAngleCanvas() {
@@ -248,6 +251,10 @@ export class AppComponent implements OnInit {
       )
       .subscribe();
   }
+
+  public drawOutputAngleCanvas() {}
+
+  public initOutputAngleControl() {}
 
   private createImage(fr: FileReader) {
     const img = new Image();

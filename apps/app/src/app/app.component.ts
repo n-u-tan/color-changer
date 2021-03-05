@@ -1,6 +1,11 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { fromEvent, merge } from 'rxjs';
 import { filter, map, switchMap, takeUntil, tap } from 'rxjs/operators';
+import {
+  mapMouseEventToAngleFactory,
+  mapTouchEventToAngleFactory,
+  tapEventPreventDefault
+} from './utils';
 
 function componentToHex(c: number) {
   var hex = c.toString(16);
@@ -106,6 +111,10 @@ export class AppComponent implements OnInit {
   public colorPointCanvasElement: ElementRef<HTMLCanvasElement>;
   @ViewChild('angleCanvas', { static: true })
   public angleCanvasElement: ElementRef<HTMLCanvasElement>;
+  @ViewChild('outputColorPointCanvas', { static: true })
+  public outputColorPointCanvasElement: ElementRef<HTMLCanvasElement>;
+  @ViewChild('outputAngleCanvas', { static: true })
+  public outputAngleCanvasElement: ElementRef<HTMLCanvasElement>;
   public inputStartAngle = 150;
   public inputEndAngle = 270;
   public outputAngle = 60;
@@ -155,65 +164,32 @@ export class AppComponent implements OnInit {
   }
 
   private initAngleControl() {
-    const mouseEventToAngle = (mouseEvent: MouseEvent) => {
-      mouseEvent.preventDefault();
-      const offset = this.getOffset(this.angleCanvasElement.nativeElement);
-      const point = {
-        x: mouseEvent.clientX - offset.left,
-        y: mouseEvent.clientY - offset.top
-      };
-      const coor = {
-        x: point.x - 100,
-        y: point.y - 100
-      };
-      const r = Math.sqrt(coor.x * coor.x + coor.y * coor.y);
-      let theta = Math.acos(-coor.y / r);
-      if (coor.x < 0) {
-        theta = 2 * Math.PI - theta;
-      }
-      return (theta / Math.PI) * 180;
-    };
-
-    const touchEventToAngle = (touchEvent: TouchEvent) => {
-      touchEvent.preventDefault();
-      const offset = this.getOffset(this.angleCanvasElement.nativeElement);
-      const point = {
-        x: touchEvent.changedTouches[0].clientX - offset.left,
-        y: touchEvent.changedTouches[0].clientY - offset.top
-      };
-      const coor = {
-        x: point.x - 100,
-        y: point.y - 100
-      };
-      const r = Math.sqrt(coor.x * coor.x + coor.y * coor.y);
-      let theta = Math.acos(-coor.y / r);
-      if (coor.x < 0) {
-        theta = 2 * Math.PI - theta;
-      }
-      return (theta / Math.PI) * 180;
-    };
-
     const element = this.angleCanvasElement.nativeElement;
+    const mapMouseEventToAngle = mapMouseEventToAngleFactory(element);
+    const mapTouchEventToAngle = mapTouchEventToAngleFactory(element);
     const mouseDown$ = fromEvent(element, 'mousedown').pipe(
-      map(mouseEventToAngle)
+      tapEventPreventDefault,
+      mapMouseEventToAngle
     );
     const mouseMove$ = fromEvent(element, 'mousemove').pipe(
-      map(mouseEventToAngle)
+      tapEventPreventDefault,
+      mapMouseEventToAngle
     );
-    const mouseUp$ = fromEvent(element, 'mouseup').pipe(map(mouseEventToAngle));
-    const mouseLeave$ = fromEvent(element, 'mouseleave').pipe(
-      map(mouseEventToAngle)
+    const mouseUp$ = fromEvent(element, 'mouseup').pipe(
+      tapEventPreventDefault,
+      mapMouseEventToAngle
     );
+    const mouseLeave$ = fromEvent(element, 'mouseleave');
     const mouseUpAndLeave$ = merge(mouseUp$, mouseLeave$);
     const touchStart$ = fromEvent(element, 'touchstart').pipe(
-      map(touchEventToAngle)
+      tapEventPreventDefault,
+      mapTouchEventToAngle
     );
     const touchMove$ = fromEvent(element, 'touchmove').pipe(
-      map(touchEventToAngle)
+      tapEventPreventDefault,
+      mapTouchEventToAngle
     );
-    const touchEnd$ = fromEvent(element, 'touchend').pipe(
-      map(touchEventToAngle)
-    );
+    const touchEnd$ = fromEvent(element, 'touchend');
     const start$ = merge(mouseDown$, touchStart$);
     const move$ = merge(mouseMove$, touchMove$);
     const end$ = merge(mouseUpAndLeave$, touchEnd$);
@@ -252,7 +228,26 @@ export class AppComponent implements OnInit {
       .subscribe();
   }
 
-  public drawOutputAngleCanvas() {}
+  public drawOutputAngleCanvas() {
+    const angleCtx = this.outputAngleCanvasElement.nativeElement.getContext(
+      '2d'
+    );
+    angleCtx.clearRect(0, 0, 200, 200);
+    let borderCircle = new Path2D();
+    borderCircle.arc(100, 100, 95, 0, 2 * Math.PI, false);
+    angleCtx.strokeStyle = '#666666';
+    angleCtx.fillStyle = '#666666';
+    angleCtx.stroke(borderCircle);
+    let outputAngleRad = (this.outputAngle * Math.PI) / 180;
+    let selectedSector = new Path2D();
+    selectedSector.moveTo(100, 100);
+    selectedSector.lineTo(
+      100 + 95 * Math.sin(outputAngleRad),
+      100 - 95 * Math.cos(outputAngleRad)
+    );
+    angleCtx.lineWidth = 5;
+    angleCtx.stroke(selectedSector);
+  }
 
   public initOutputAngleControl() {}
 
@@ -314,13 +309,5 @@ export class AppComponent implements OnInit {
         colorPointCtx.fill(circle);
       }
     });
-  }
-
-  private getOffset(el: HTMLElement) {
-    const rect = el.getBoundingClientRect();
-    const scrollLeft =
-      window.pageXOffset || document.documentElement.scrollLeft;
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    return { top: rect.top + scrollTop, left: rect.left + scrollLeft };
   }
 }

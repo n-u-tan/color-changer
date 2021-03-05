@@ -333,6 +333,7 @@ export class AppComponent implements OnInit {
     const reducedColors = {};
     const colorPointCanvas = this.colorPointCanvasElement.nativeElement;
     const colorPointCtx = colorPointCanvas.getContext('2d');
+    colorPointCtx.clearRect(0, 0, 200, 200);
     Object.entries(colors).forEach(([k, v]) => {
       if (v.count > 500 && v.hsl[1] > 10 && v.hsl[2] < 90) {
         reducedColors[k] = v;

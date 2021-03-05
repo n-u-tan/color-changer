@@ -212,15 +212,13 @@ export class AppComponent implements OnInit {
         switchMap(changeTarget =>
           move$.pipe(
             takeUntil(end$),
-            tap({
-              next: angle => {
-                if (changeTarget === 'start') {
-                  this.inputStartAngle = angle;
-                } else if (changeTarget === 'end') {
-                  this.inputEndAngle = angle;
-                }
-                this.drawAngleCanvas();
+            tap(angle => {
+              if (changeTarget === 'start') {
+                this.inputStartAngle = angle;
+              } else if (changeTarget === 'end') {
+                this.inputEndAngle = angle;
               }
+              this.drawAngleCanvas();
             })
           )
         )
@@ -237,6 +235,7 @@ export class AppComponent implements OnInit {
     borderCircle.arc(100, 100, 95, 0, 2 * Math.PI, false);
     angleCtx.strokeStyle = '#666666';
     angleCtx.fillStyle = '#666666';
+    angleCtx.lineWidth = 1;
     angleCtx.stroke(borderCircle);
     let outputAngleRad = (this.outputAngle * Math.PI) / 180;
     let selectedSector = new Path2D();
@@ -249,7 +248,50 @@ export class AppComponent implements OnInit {
     angleCtx.stroke(selectedSector);
   }
 
-  public initOutputAngleControl() {}
+  public initOutputAngleControl() {
+    const element = this.outputAngleCanvasElement.nativeElement;
+    const mapMouseEventToAngle = mapMouseEventToAngleFactory(element);
+    const mapTouchEventToAngle = mapTouchEventToAngleFactory(element);
+    const mouseDown$ = fromEvent(element, 'mousedown').pipe(
+      tapEventPreventDefault,
+      mapMouseEventToAngle
+    );
+    const mouseMove$ = fromEvent(element, 'mousemove').pipe(
+      tapEventPreventDefault,
+      mapMouseEventToAngle
+    );
+    const mouseUp$ = fromEvent(element, 'mouseup').pipe(
+      tapEventPreventDefault,
+      mapMouseEventToAngle
+    );
+    const mouseLeave$ = fromEvent(element, 'mouseleave');
+    const mouseUpAndLeave$ = merge(mouseUp$, mouseLeave$);
+    const touchStart$ = fromEvent(element, 'touchstart').pipe(
+      tapEventPreventDefault,
+      mapTouchEventToAngle
+    );
+    const touchMove$ = fromEvent(element, 'touchmove').pipe(
+      tapEventPreventDefault,
+      mapTouchEventToAngle
+    );
+    const touchEnd$ = fromEvent(element, 'touchend');
+    const start$ = merge(mouseDown$, touchStart$);
+    const move$ = merge(mouseMove$, touchMove$);
+    const end$ = merge(mouseUpAndLeave$, touchEnd$);
+    start$
+      .pipe(
+        switchMap(() =>
+          move$.pipe(
+            takeUntil(end$),
+            tap(angle => {
+              this.outputAngle = angle;
+              this.drawOutputAngleCanvas();
+            })
+          )
+        )
+      )
+      .subscribe();
+  }
 
   private createImage(fr: FileReader) {
     const img = new Image();

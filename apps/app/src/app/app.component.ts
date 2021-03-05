@@ -351,5 +351,23 @@ export class AppComponent implements OnInit {
         colorPointCtx.fill(circle);
       }
     });
+    i = -4;
+    while ((i += 1 * 4) < length) {
+      const rgb: [number, number, number] = [data[i], data[i + 1], data[i + 2]];
+      const key = rgb.join(',');
+      const hsl = colors[key].hsl;
+      if (hsl[0] <= this.inputEndAngle && hsl[0] >= this.inputStartAngle) {
+        const newHsl: [number, number, number] = [
+          this.outputAngle,
+          hsl[1],
+          hsl[2]
+        ];
+        const newRgb = HSLToRGB(...newHsl);
+        data[i] = newRgb[0];
+        data[i + 1] = newRgb[1];
+        data[i + 2] = newRgb[2];
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
   }
 }

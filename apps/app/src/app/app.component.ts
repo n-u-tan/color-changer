@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { fromEvent, merge } from 'rxjs';
 import { filter, map, switchMap, takeUntil, tap } from 'rxjs/operators';
+import { Application } from './classes';
 import {
   mapMouseEventToAngleFactory,
   mapTouchEventToAngleFactory,
@@ -16,7 +17,7 @@ function rgbToHex(r: number, g: number, b: number) {
   return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
 }
 
-function HSLToRGB(h, s, l) {
+function HSLToRGB(h: number, s: number, l: number): [number, number, number] {
   // Must be fractions of 1
   s /= 100;
   l /= 100;
@@ -107,6 +108,8 @@ export class AppComponent implements OnInit {
   @ViewChild('canvas', { static: true }) public canvasElement: ElementRef<
     HTMLCanvasElement
   >;
+  @ViewChild('webglCanvas', { static: true })
+  public webglCanvasElement: ElementRef<HTMLCanvasElement>;
   @ViewChild('colorPointCanvas', { static: true })
   public colorPointCanvasElement: ElementRef<HTMLCanvasElement>;
   @ViewChild('angleCanvas', { static: true })
@@ -118,6 +121,7 @@ export class AppComponent implements OnInit {
   public inputStartAngle = 150;
   public inputEndAngle = 270;
   public outputAngle = 60;
+  public app: Application;
 
   public onFileChanged() {
     const file: Blob = this.fileInputElement.nativeElement.files[0];
@@ -133,6 +137,8 @@ export class AppComponent implements OnInit {
     this.initAngleControl();
     this.drawOutputAngleCanvas();
     this.initOutputAngleControl();
+    this.drawOutputPointCanvas();
+    this.initWebGL();
   }
 
   private drawAngleCanvas() {
@@ -215,8 +221,10 @@ export class AppComponent implements OnInit {
             tap(angle => {
               if (changeTarget === 'start') {
                 this.inputStartAngle = angle;
+                this.app.setInputStartAngle(angle);
               } else if (changeTarget === 'end') {
                 this.inputEndAngle = angle;
+                this.app.setInputEndAngle(angle);
               }
               this.drawAngleCanvas();
             })
@@ -226,17 +234,17 @@ export class AppComponent implements OnInit {
       .subscribe();
   }
 
-  public drawOutputAngleCanvas() {
+  private drawOutputAngleCanvas() {
     const angleCtx = this.outputAngleCanvasElement.nativeElement.getContext(
       '2d'
     );
     angleCtx.clearRect(0, 0, 200, 200);
-    let borderCircle = new Path2D();
-    borderCircle.arc(100, 100, 95, 0, 2 * Math.PI, false);
+    // let borderCircle = new Path2D();
+    // borderCircle.arc(100, 100, 95, 0, 2 * Math.PI, false);
     angleCtx.strokeStyle = '#666666';
     angleCtx.fillStyle = '#666666';
-    angleCtx.lineWidth = 1;
-    angleCtx.stroke(borderCircle);
+    // angleCtx.lineWidth = 1;
+    // angleCtx.stroke(borderCircle);
     let outputAngleRad = (this.outputAngle * Math.PI) / 180;
     let selectedSector = new Path2D();
     selectedSector.moveTo(100, 100);
@@ -248,7 +256,7 @@ export class AppComponent implements OnInit {
     angleCtx.stroke(selectedSector);
   }
 
-  public initOutputAngleControl() {
+  private initOutputAngleControl() {
     const element = this.outputAngleCanvasElement.nativeElement;
     const mapMouseEventToAngle = mapMouseEventToAngleFactory(element);
     const mapTouchEventToAngle = mapTouchEventToAngleFactory(element);
@@ -285,6 +293,7 @@ export class AppComponent implements OnInit {
             takeUntil(end$),
             tap(angle => {
               this.outputAngle = angle;
+              this.app.setOutputAngle(angle);
               this.drawOutputAngleCanvas();
             })
           )
@@ -293,10 +302,37 @@ export class AppComponent implements OnInit {
       .subscribe();
   }
 
+  private drawOutputPointCanvas() {
+    const step = 1;
+    const ctx = this.outputColorPointCanvasElement.nativeElement.getContext(
+      '2d'
+    );
+    ctx.lineWidth = 5;
+    for (let i = 0; i < 360; i += step) {
+      const angleCenter = i;
+      const angleStart = i - step / 2 - 90;
+      const angleEnd = i + step / 2 - 90;
+      const hsl: [number, number, number] = [angleCenter, 100, 50];
+      const rgb = HSLToRGB(...hsl);
+      let borderCircle = new Path2D();
+      borderCircle.arc(
+        100,
+        100,
+        95,
+        (angleStart * Math.PI) / 180,
+        (angleEnd * Math.PI) / 180,
+        false
+      );
+      ctx.strokeStyle = rgbToHex(...rgb);
+      ctx.stroke(borderCircle);
+    }
+  }
+
   private createImage(fr: FileReader) {
     const img = new Image();
     img.onload = () => {
       this.imageLoaded(img);
+      this.tryWebGL(img);
     };
     img.src = fr.result as string;
   }
@@ -352,23 +388,14 @@ export class AppComponent implements OnInit {
         colorPointCtx.fill(circle);
       }
     });
-    i = -4;
-    while ((i += 1 * 4) < length) {
-      const rgb: [number, number, number] = [data[i], data[i + 1], data[i + 2]];
-      const key = rgb.join(',');
-      const hsl = colors[key].hsl;
-      if (hsl[0] <= this.inputEndAngle && hsl[0] >= this.inputStartAngle) {
-        const newHsl: [number, number, number] = [
-          this.outputAngle,
-          hsl[1],
-          hsl[2]
-        ];
-        const newRgb = HSLToRGB(...newHsl);
-        data[i] = newRgb[0];
-        data[i + 1] = newRgb[1];
-        data[i + 2] = newRgb[2];
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
+  }
+
+  public async initWebGL() {
+    this.app = new Application();
+    document.getElementById('canvas-container').appendChild(this.app.canvas);
+  }
+
+  public async tryWebGL(img: HTMLImageElement) {
+    this.app.setImage(img);
   }
 }

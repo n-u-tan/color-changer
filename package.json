@@ -46,6 +46,7 @@
     "@nrwl/angular": "8.9.0",
     "core-js": "^2.5.4",
     "hammerjs": "^2.0.8",
+    "ogl-typescript": "^0.1.20",
     "rxjs": "~6.4.0",
     "zone.js": "^0.9.1"
   },
